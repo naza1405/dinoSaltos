@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dino Runner Pro - Ranking Limpio</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      background: #e0e0e0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    .main-wrapper {
+      display: flex;
+      gap: 20px;
+      max-width: 1100px;
+      width: 95%;
+      align-items: flex-start;
+    }
+
+    .game-container {
+      flex: 3;
+      background: white;
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+
+    #game {
+      width: 100%;
+      height: 200px;
+      background: #fafafa;
+      border-bottom: 3px solid #555;
+      position: relative;
+      overflow: hidden;
+      margin: 20px 0;
+      border-radius: 8px;
+    }
+
+    #dino {
+      width: 60px;
+      height: 60px;
+      position: absolute;
+      bottom: 0;
+      left: 50px;
+      background-color: #555;
+      background-image: url("dinoGrande.png");
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: bottom;
+      z-index: 10;
+    }
+
+    .obstacle {
+      position: absolute;
+      bottom: 0;
+      background-size: 100% 100%;
+      background-repeat: no-repeat;
+      background-position: bottom;
+    }
+
+    .cactus { 
+      width: 35px;
+      height: 50px; 
+      background-color: green;
+      background-image: url("cactus.png");
+    }
+
+    .cactus-large { 
+      width: 50px;
+      height: 80px; 
+      background-color: darkgreen;
+      background-image: url("cactus.png");
+    }
+
+    .sidebar {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    }
+
+    .rank-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .rank-name { font-weight: bold; }
+    .rank-val { color: #2ecc71; font-weight: bold; }
+
+    .jump { animation: jump-anim 0.5s ease-out; }
+    @keyframes jump-anim {
+      0% { bottom: 0; }
+      50% { bottom: 140px; }
+      100% { bottom: 0; }
+    }
+
+    .move { animation: move-logic 1.5s linear forwards; }
+    @keyframes move-logic {
+      from { right: -60px; }
+      to { right: 110%; }
+    }
+
+    .hidden { display: none; }
+    #restart-btn { margin-top: 10px; padding: 12px; cursor: pointer; width: 100%; background: #222; color: white; border: none; border-radius: 8px; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <div class="main-wrapper">
+    <div class="game-container">
+      <h2 id="welcome">Dino Runner Pro</h2>
+      <div id="game">
+        <div id="dino"></div>
+      </div>
+      <div id="score">Puntaje: 0</div>
+      
+      <div id="login-zone">
+        <input type="text" id="username" placeholder="Tu nombre" style="padding:10px; width:100%; margin-bottom:10px; border-radius: 8px; border: 1px solid #ccc;">
+        <button onclick="login()" style="width:100%; padding:10px; border-radius: 8px; border: none; background: #222; color: white; cursor: pointer; font-weight: bold;">Empezar</button>
+      </div>
+      
+      <button id="restart-btn" class="hidden" onclick="restartGame()">Reintentar</button>
+    </div>
+
+    <div class="sidebar">
+      <div class="card">
+        <h3>🏆 Top Ranking</h3>
+        <div id="ranking-list">
+          <!-- Se llena dinámicamente -->
+        </div>
+      </div>
+      
+      <div class="card">
+        <h3>💡 Info</h3>
+        <p>Usa <b>Espacio</b> para saltar.</p>
+        <button onclick="clearAllData()" style="margin-top:15px; font-size:10px; background:none; border:none; color:red; cursor:pointer; text-decoration:underline;">Borrar todos los récords</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const game = document.getElementById("game");
+  const dino = document.getElementById("dino");
+  const scoreText = document.getElementById("score");
+  const restartBtn = document.getElementById("restart-btn");
+  const rankingList = document.getElementById("ranking-list");
+  
+  let score = 0;
+  let gameRunning = false;
+  let obstacleTimeout;
+  let currentPlayer = "";
+
+  // Cargar tabla al iniciar
+  window.onload = updateRankingTable;
+
+  function login() {
+    const nameInput = document.getElementById("username").value.trim();
+    if(!nameInput) return alert("Por favor, ingresa tu nombre");
+    currentPlayer = nameInput;
+    document.getElementById("login-zone").classList.add("hidden");
+    startGame();
+  }
+
+  function startGame() {
+    gameRunning = true;
+    score = 0;
+    scoreText.innerText = "Puntaje: 0";
+    restartBtn.classList.add("hidden");
+    createObstacle();
+    requestAnimationFrame(checkCollision);
+  }
+
+  function createObstacle() {
+    if (!gameRunning) return;
+
+    const obstacle = document.createElement("div");
+    const isLarge = Math.random() > 0.6;
+    
+    obstacle.classList.add("obstacle");
+    obstacle.classList.add(isLarge ? "cactus-large" : "cactus");
+    obstacle.classList.add("move");
+    game.appendChild(obstacle);
+
+    obstacle.addEventListener('animationend', () => {
+      obstacle.remove();
+    });
+
+    let nextSpawn = Math.random() * (1800 - 900) + 900;
+    obstacleTimeout = setTimeout(createObstacle, nextSpawn);
+  }
+
+  function checkCollision() {
+    if (!gameRunning) return;
+
+    const obstacles = document.querySelectorAll(".obstacle");
+    const dinoRect = dino.getBoundingClientRect();
+
+    obstacles.forEach(obs => {
+      const obsRect = obs.getBoundingClientRect();
+      if (
+        dinoRect.left < obsRect.right - 15 &&
+        dinoRect.right > obsRect.left + 15 &&
+        dinoRect.top < obsRect.bottom &&
+        dinoRect.bottom > obsRect.top + 5
+      ) {
+        gameOver();
+      }
+    });
+
+    if (gameRunning) {
+      score++;
+      scoreText.innerText = "Puntaje: " + Math.floor(score / 5);
+      requestAnimationFrame(checkCollision);
+    }
+  }
+
+  function jump() {
+    if (!dino.classList.contains("jump") && gameRunning) {
+      dino.classList.add("jump");
+      setTimeout(() => dino.classList.remove("jump"), 500);
+    }
+  }
+
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "Space") {
+      e.preventDefault(); 
+      jump();
+    }
+  });
+
+  function gameOver() {
+    gameRunning = false;
+    clearTimeout(obstacleTimeout);
+    
+    let finalScore = Math.floor(score / 5);
+    saveScore(currentPlayer, finalScore);
+    updateRankingTable();
+
+    alert("¡Juego terminado! Puntaje: " + finalScore);
+    
+    document.querySelectorAll(".obstacle").forEach(o => o.remove());
+    restartBtn.classList.remove("hidden");
+  }
+
+  function restartGame() {
+    startGame();
+  }
+
+  // --- LÓGICA DE RANKING ---
+
+  function saveScore(name, newScore) {
+    let ranking = JSON.parse(localStorage.getItem("dinoRanking")) || [];
+    
+    // Buscar si el jugador ya existe (sin importar mayúsculas/minúsculas)
+    const playerIndex = ranking.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
+
+    if (playerIndex !== -1) {
+      // Si existe, solo actualizar si el nuevo puntaje es mayor
+      if (newScore > ranking[playerIndex].score) {
+        ranking[playerIndex].score = newScore;
+      }
+    } else {
+      // Si es nuevo, añadirlo
+      ranking.push({ name: name, score: newScore });
+    }
+
+    // Ordenar y guardar top 5
+    ranking.sort((a, b) => b.score - a.score);
+    ranking = ranking.slice(0, 5);
+    localStorage.setItem("dinoRanking", JSON.stringify(ranking));
+  }
+
+  function updateRankingTable() {
+    const ranking = JSON.parse(localStorage.getItem("dinoRanking")) || [];
+    rankingList.innerHTML = "";
+
+    if (ranking.length === 0) {
+      rankingList.innerHTML = "<div style='color:#999; font-size: 0.9em; padding: 10px 0;'>No hay récords registrados</div>";
+      return;
+    }
+
+    ranking.forEach((item, index) => {
+      const div = document.createElement("div");
+      div.classList.add("rank-item");
+      div.innerHTML = `
+        <span>${index + 1}. <span class="rank-name">${item.name}</span></span>
+        <span class="rank-val">${item.score}</span>
+      `;
+      rankingList.appendChild(div);
+    });
+  }
+
+  function clearAllData() {
+    if(confirm("¿Estás seguro de borrar todos los puntajes?")) {
+      localStorage.removeItem("dinoRanking");
+      updateRankingTable();
+    }
+  }
+</script>
+</body>
+</html>
